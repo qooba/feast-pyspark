@@ -10,7 +10,7 @@ from feast import FileSource, OnDemandFeatureView
 from feast.data_source import DataSource
 from feast.errors import FeastJoinKeysDuringMaterialization
 from feast.feature_view import DUMMY_ENTITY_ID, DUMMY_ENTITY_VAL, FeatureView
-from feast.infra.offline_stores.offline_store import OfflineStore, RetrievalJob
+from feast.infra.offline_stores.offline_store import OfflineStore, RetrievalJob, RetrievalMetadata
 from feast.infra.offline_stores.offline_utils import (
     DEFAULT_ENTITY_DF_EVENT_TIMESTAMP_COL,
 )
@@ -20,9 +20,10 @@ from feast.infra.provider import (
 from feast.registry import Registry
 from feast.repo_config import FeastConfigBaseModel, RepoConfig
 from feast.usage import log_exceptions_and_usage
+from feast.saved_dataset import SavedDatasetStorage
 
 from delta.tables import DeltaTable
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, expr
 import pyspark.sql.dataframe as sd
 
 def _run_spark_field_mapping(
@@ -30,7 +31,7 @@ def _run_spark_field_mapping(
 ):
     if field_mapping:
         return table.select([col(c).alias(mapping.get(c, c)) for c in table.columns])
-    else
+    else:
         return table
 
 class SparkOfflineStoreConfig(FeastConfigBaseModel):
@@ -69,17 +70,29 @@ class SparkRetrievalJob(RetrievalJob):
     @log_exceptions_and_usage
     def _to_df_internal(self) -> pd.DataFrame:
         # Only execute the evaluation function to build the final historical retrieval dataframe at the last moment.
-        df = self.evaluation_function().compute()
+        df = self.evaluation_function().toPandas()
         return df
 
     @log_exceptions_and_usage
     def _to_arrow_internal(self):
         # Only execute the evaluation function to build the final historical retrieval dataframe at the last moment.
-        df = self.evaluation_function().compute()
+        df = self.evaluation_function().toPandas()
         return pyarrow.Table.from_pandas(df)
+
+    @property
+    def metadata(self) -> Optional[RetrievalMetadata]:
+        pass
+
+    def persist(self, storage: SavedDatasetStorage):
+        pass
+
+
 
 
 class SparkOfflineStore(OfflineStore):
+
+    spark = None
+
     @staticmethod
     def get_historical_features(
         config: RepoConfig,
@@ -122,9 +135,9 @@ class SparkOfflineStore(OfflineStore):
         # Create lazy function that is only called from the RetrievalJob object
         def evaluate_historical_retrieval():
 
-            spark.conf.set("spark.sql.session.timeZone", "UTC")
+            SparkOfflineStore.spark.conf.set("spark.sql.session.timeZone", "UTC")
             # Create a copy of entity_df to prevent modifying the original
-            entity_df_with_features = spark.createDataFrame(entity_df)
+            entity_df_with_features = SparkOfflineStore.spark.createDataFrame(entity_df)
 
             # Sort event timestamp values
             entity_df_with_features = entity_df_with_features.orderBy(
@@ -156,8 +169,7 @@ class SparkOfflineStore(OfflineStore):
                 right_entity_key_columns = [c for c in right_entity_key_columns if c]
 
                 # feature_view.batch_source.s3_endpoint_override
-
-                df_to_join = DeltaTable.forPath(feature_view.batch_source.path)
+                df_to_join = DeltaTable.forPath(SparkOfflineStore.spark, feature_view.batch_source.path).toDF()
 
                 # Build a list of all the features we should select from this source
                 feature_names = []
@@ -182,7 +194,7 @@ class SparkOfflineStore(OfflineStore):
                 df_to_join = df_to_join.select([col(c) for c in right_entity_key_columns + feature_names])
 
                 # Get only data with requested entities
-                ttl.total_seconds()
+                ttl_seconds = feature_view.ttl.total_seconds()
 
                 df_to_join = entity_df_with_features.join(df_to_join, join_keys, "left").filter(
                     ( col(event_timestamp_column) >= col(entity_df_event_timestamp_col) - expr(f"INTERVAL {ttl_seconds} seconds") ) &
@@ -194,7 +206,7 @@ class SparkOfflineStore(OfflineStore):
                 else:
                     df_to_join = df_to_join.orderBy(col(event_timestamp_column).desc())
 
-                df_to_join = df_to_join.dropDuplicates([join_keys])
+                df_to_join = df_to_join.dropDuplicates(join_keys)
 
                 # Rename columns by the field mapping dictionary if it exists
                 if feature_view.batch_source.field_mapping is not None:
@@ -335,5 +347,6 @@ class SparkOfflineStore(OfflineStore):
         event_timestamp_column: str,
         start_date: datetime,
         end_date: datetime,
-    ) -> RetrievalJob: ...
+    ) -> RetrievalJob:
+        pass
 
