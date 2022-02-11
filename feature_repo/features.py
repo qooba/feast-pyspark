@@ -8,7 +8,7 @@ from feast import FileSource
 
 
 my_stats = DeltaDataSource(
-    path="/home/jovyan/notebooks/dataset/all",
+    path="/home/jovyan/feast-spark/dataset/all",
     event_timestamp_column="datetime",
 )
 my_entity = Entity(name="entity_id", value_type=ValueType.INT64, description="entity id",)
