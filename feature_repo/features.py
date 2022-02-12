@@ -1,14 +1,11 @@
 from google.protobuf.duration_pb2 import Duration
 from feast import Entity, Feature, FeatureView, ValueType
 
-from feast_custom_offline_store.delta import DeltaDataSource
+from feast_spark import DeltaDataSource
 from feast.data_format import ParquetFormat
 
-from feast import FileSource
-
-
 my_stats = DeltaDataSource(
-    path="/home/jovyan/feast-spark/dataset/all",
+    path="/home/jovyan/feast-spark/feature_repo/dataset/all",
     event_timestamp_column="datetime",
 )
 my_entity = Entity(name="entity_id", value_type=ValueType.INT64, description="entity id",)

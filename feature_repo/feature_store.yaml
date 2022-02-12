@@ -5,4 +5,4 @@ online_store:
     type: sqlite
     path: data/online_store.db
 offline_store:
-    type: feast_custom_offline_store.spark.SparkOfflineStore
+    type: feast_spark.SparkOfflineStore

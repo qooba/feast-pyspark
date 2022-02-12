@@ -38,8 +38,8 @@ class SparkOfflineStoreConfig(FeastConfigBaseModel):
     """ Offline store config for local (file-based) store """
 
     type: Literal[
-        "feast_custom_offline_store.spark.SparkOfflineStore"
-    ] = "feast_custom_offline_store.spark.SparkOfflineStore"
+        "feast_spark.SparkOfflineStore"
+    ] = "feast_spark.SparkOfflineStore"
     """ Offline store type selector"""
 
 
