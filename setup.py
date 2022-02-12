@@ -15,6 +15,7 @@ DEV_REQUIRE = [
     "build==0.7.0",
     "twine==3.4.2",
     "pytest>=6.0.0",
+    "pyspark-stubs",
 ]
 
 setup(

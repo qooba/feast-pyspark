@@ -1,14 +1,16 @@
 import json
 from datetime import datetime
-from typing import List, Optional, Union, Callable, Dict
+from typing import Callable, Dict, List, Optional, Union
 
 from feast.data_source import DataSource
-from feast.value_type import ValueType
-from feast.repo_config import RepoConfig
 from feast.protos.feast.core.DataSource_pb2 import DataSource as DataSourceProto
+from feast.repo_config import RepoConfig
+from feast.value_type import ValueType
+
 
 class DeltaDataSource(DataSource):
     """Custom data source class for local files"""
+
     def __init__(
         self,
         event_timestamp_column: Optional[str] = "",
@@ -66,7 +68,9 @@ class DeltaDataSource(DataSource):
         Creates a DataSource proto representation of this object, by serializing some
         custom options into the custom_options field as a binary encoded json string.
         """
-        config_json = json.dumps({"path": self.path, "s3_endpoint_override": self.s3_endpoint_override})
+        config_json = json.dumps(
+            {"path": self.path, "s3_endpoint_override": self.s3_endpoint_override}
+        )
         data_source_proto = DataSourceProto(
             type=DataSourceProto.CUSTOM_SOURCE,
             field_mapping=self.field_mapping,
@@ -91,4 +95,3 @@ class DeltaDataSource(DataSource):
     @staticmethod
     def source_datatype_to_feast_value_type() -> Callable[[str], ValueType]:
         return type_map.pa_to_feast_value_type
-

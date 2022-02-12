@@ -1,45 +1,48 @@
 from datetime import datetime
-from typing import Callable, List, Optional, Union, Dict
+from typing import Callable, Dict, List, Optional, Union
 
 import pandas as pd
 import pyarrow
+import pyspark.sql.dataframe as sd
 import pytz
-from pydantic.typing import Literal
-
+from delta.tables import DeltaTable
 from feast import FileSource, OnDemandFeatureView
 from feast.data_source import DataSource
 from feast.errors import FeastJoinKeysDuringMaterialization
 from feast.feature_view import DUMMY_ENTITY_ID, DUMMY_ENTITY_VAL, FeatureView
-from feast.infra.offline_stores.offline_store import OfflineStore, RetrievalJob, RetrievalMetadata
+from feast.infra.offline_stores.offline_store import (
+    OfflineStore,
+    RetrievalJob,
+    RetrievalMetadata,
+)
 from feast.infra.offline_stores.offline_utils import (
     DEFAULT_ENTITY_DF_EVENT_TIMESTAMP_COL,
 )
-from feast.infra.provider import (
-    _get_requested_feature_views_to_features_dict,
-)
+from feast.infra.provider import _get_requested_feature_views_to_features_dict
 from feast.registry import Registry
 from feast.repo_config import FeastConfigBaseModel, RepoConfig
-from feast.usage import log_exceptions_and_usage
 from feast.saved_dataset import SavedDatasetStorage
-
-from delta.tables import DeltaTable
+from feast.usage import log_exceptions_and_usage
+from pydantic.typing import Literal
 from pyspark.sql.functions import col, expr
-import pyspark.sql.dataframe as sd
+
 
 def _run_spark_field_mapping(
-    table: sd.DataFrame, field_mapping: Dict[str, str],
+    table: sd.DataFrame,
+    field_mapping: Dict[str, str],
 ):
     if field_mapping:
-        return table.select([col(c).alias(mapping.get(c, c)) for c in table.columns])
+        return table.select(
+            [col(c).alias(field_mapping.get(c, c)) for c in table.columns]
+        )
     else:
         return table
 
-class SparkOfflineStoreConfig(FeastConfigBaseModel):
-    """ Offline store config for local (file-based) store """
 
-    type: Literal[
-        "feast_spark.SparkOfflineStore"
-    ] = "feast_spark.SparkOfflineStore"
+class SparkOfflineStoreConfig(FeastConfigBaseModel):
+    """Offline store config for local (file-based) store"""
+
+    type: Literal["feast_spark.SparkOfflineStore"] = "feast_spark.SparkOfflineStore"
     """ Offline store type selector"""
 
 
@@ -87,8 +90,6 @@ class SparkRetrievalJob(RetrievalJob):
         pass
 
 
-
-
 class SparkOfflineStore(OfflineStore):
 
     spark = None
@@ -104,7 +105,7 @@ class SparkOfflineStore(OfflineStore):
         full_feature_names: bool = False,
     ) -> RetrievalJob:
         if not isinstance(entity_df, pd.DataFrame) and not isinstance(
-            entity_df, dd.DataFrame
+            entity_df, pd.DataFrame
         ):
             raise ValueError(
                 f"Please provide an entity_df of type {type(pd.DataFrame)} instead of type {type(entity_df)}"
@@ -169,7 +170,9 @@ class SparkOfflineStore(OfflineStore):
                 right_entity_key_columns = [c for c in right_entity_key_columns if c]
 
                 # feature_view.batch_source.s3_endpoint_override
-                df_to_join = DeltaTable.forPath(SparkOfflineStore.spark, feature_view.batch_source.path).toDF()
+                df_to_join = DeltaTable.forPath(
+                    SparkOfflineStore.spark, feature_view.batch_source.path
+                ).toDF()
 
                 # Build a list of all the features we should select from this source
                 feature_names = []
@@ -191,18 +194,32 @@ class SparkOfflineStore(OfflineStore):
                 df_to_join = _run_spark_field_mapping(df_to_join, columns_map)
 
                 # Select only the columns we need to join from the feature dataframe
-                df_to_join = df_to_join.select([col(c) for c in right_entity_key_columns + feature_names])
+                df_to_join = df_to_join.select(
+                    [col(c) for c in right_entity_key_columns + feature_names]
+                )
 
                 # Get only data with requested entities
                 ttl_seconds = feature_view.ttl.total_seconds()
 
-                df_to_join = entity_df_with_features.join(df_to_join, join_keys, "left").filter(
-                    ( col(event_timestamp_column) >= col(entity_df_event_timestamp_col) - expr(f"INTERVAL {ttl_seconds} seconds") ) &
-                    ( col(event_timestamp_column) <= col(entity_df_event_timestamp_col) )
+                df_to_join = entity_df_with_features.join(
+                    df_to_join, join_keys, "left"
+                ).filter(
+                    (
+                        col(event_timestamp_column)
+                        >= col(entity_df_event_timestamp_col)
+                        - expr(f"INTERVAL {ttl_seconds} seconds")
+                    )
+                    & (
+                        col(event_timestamp_column)
+                        <= col(entity_df_event_timestamp_col)
+                    )
                 )
 
                 if created_timestamp_column:
-                    df_to_join = df_to_join.orderBy(col(created_timestamp_column).desc(), col(event_timestamp_column).desc())
+                    df_to_join = df_to_join.orderBy(
+                        col(created_timestamp_column).desc(),
+                        col(event_timestamp_column).desc(),
+                    )
                 else:
                     df_to_join = df_to_join.orderBy(col(event_timestamp_column).desc())
 
@@ -252,11 +269,7 @@ class SparkOfflineStore(OfflineStore):
         def evaluate_offline_job():
 
             storage_options = (
-                {
-                    "client_kwargs": {
-                        "endpoint_url": data_source.s3_endpoint_override
-                    }
-                }
+                {"client_kwargs": {"endpoint_url": data_source.s3_endpoint_override}}
                 if data_source.s3_endpoint_override
                 else None
             )
@@ -335,7 +348,8 @@ class SparkOfflineStore(OfflineStore):
 
         # When materializing a single feature view, we don't need full feature names. On demand transforms aren't materialized
         return SparkRetrievalJob(
-            evaluation_function=evaluate_offline_job, full_feature_names=False,
+            evaluation_function=evaluate_offline_job,
+            full_feature_names=False,
         )
 
     @staticmethod
@@ -349,4 +363,3 @@ class SparkOfflineStore(OfflineStore):
         end_date: datetime,
     ) -> RetrievalJob:
         pass
-
