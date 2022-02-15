@@ -12,7 +12,7 @@ RUN apt update && apt install curl git ssh cmake ack g++ tmux vim -yq
 USER 1000
 RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/qooba/vim-python-ide/master/setup.sh)"
 
-RUN git clone https://github.com/qooba/feast-spark.git && cd feast-spark && pip install -e .
+RUN git clone https://github.com/qooba/feast-pyspark.git && cd feast-pyspark && pip install -e .
 
 CMD pyspark --packages io.delta:delta-core_2.12:1.1.0 --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" --conf "spark.driver.memory=5g" --conf "spark.executor.memory=5g"
 
