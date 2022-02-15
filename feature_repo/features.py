@@ -5,7 +5,7 @@ from feast_pyspark import DeltaDataSource
 from feast.data_format import ParquetFormat
 
 my_stats = DeltaDataSource(
-    path="/home/jovyan/feast-spark/feature_repo/dataset/all",
+    path="/home/jovyan/feast-pyspark/feature_repo/dataset/all",
     event_timestamp_column="datetime",
 )
 my_entity = Entity(name="entity_id", value_type=ValueType.INT64, description="entity id",)
