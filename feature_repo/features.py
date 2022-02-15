@@ -1,7 +1,7 @@
 from google.protobuf.duration_pb2 import Duration
 from feast import Entity, Feature, FeatureView, ValueType
 
-from feast_spark import DeltaDataSource
+from feast_pyspark import DeltaDataSource
 from feast.data_format import ParquetFormat
 
 my_stats = DeltaDataSource(

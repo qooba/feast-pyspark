@@ -42,7 +42,7 @@ def _run_spark_field_mapping(
 class SparkOfflineStoreConfig(FeastConfigBaseModel):
     """Offline store config for local (file-based) store"""
 
-    type: Literal["feast_spark.SparkOfflineStore"] = "feast_spark.SparkOfflineStore"
+    type: Literal["feast_pyspark.SparkOfflineStore"] = "feast_pyspark.SparkOfflineStore"
     """ Offline store type selector"""
 
 

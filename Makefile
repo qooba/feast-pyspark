@@ -4,14 +4,14 @@ help: ## This help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-$(MAKE_HELP_LEFT_COLUMN_WIDTH)s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
 
 format: ## Format all the code using isort and black
-	isort feast_spark/
-	black --target-version py37 feast_spark
+	isort feast_pyspark/
+	black --target-version py37 feast_pyspark
 
 lint: ## Run mypy, isort, flake8, and black
-	mypy feast_spark/
-	isort feast_spark/ --check-only
-	flake8 feast_spark/
-	black --check feast_spark
+	mypy feast_pyspark/
+	isort feast_pyspark/ --check-only
+	flake8 feast_pyspark/
+	black --check feast_pyspark
 
 build: ## Build the wheel
 	rm -rf dist/*

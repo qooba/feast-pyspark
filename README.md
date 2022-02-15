@@ -10,8 +10,8 @@ pip install feast
 
 ### Install feast-postgres:
 ```shell
-git clone https://github.com/qooba/feast-spark.git
-cd feast-spark
+git clone https://github.com/qooba/feast-pyspark.git
+cd feast-pyspark
 pip install -e .
 ```
 
@@ -30,7 +30,7 @@ provider: local
 online_store:
     ...
 offline_store:
-    type: feast_spark.SparkOfflineStore # MUST be this value
+    type: feast_pyspark.SparkOfflineStore # MUST be this value
 ```
 
 ### Example

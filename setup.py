@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-NAME = "feast_spark"
+NAME = "feast_pyspark"
 REQUIRES_PYTHON = ">=3.7.0"
 
 INSTALL_REQUIRE = [
@@ -16,6 +16,7 @@ DEV_REQUIRE = [
     "twine==3.4.2",
     "pytest>=6.0.0",
     "pyspark-stubs",
+    "deltalake",
 ]
 
 setup(
@@ -26,7 +27,7 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=REQUIRES_PYTHON,
     url="https://github.com/qooba/feast-spark",
-    packages=find_packages(include=["feast_spark"]),
+    packages=find_packages(include=["feast_pyspark"]),
     install_requires=INSTALL_REQUIRE,
     extras_require={
         "dev": DEV_REQUIRE,
