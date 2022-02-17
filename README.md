@@ -35,8 +35,6 @@ offline_store:
         spark.master: "local[*]"
         spark.ui.enabled: "false"
         spark.eventLog.enabled: "false"
-        spark.sql.catalogImplementation: "hive"
-        spark.sql.parser.quotedRegexColumnNames: "true"
         spark.sql.session.timeZone: "UTC"
 ```
 
