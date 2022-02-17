@@ -30,7 +30,14 @@ provider: local
 online_store:
     ...
 offline_store:
-    type: feast_pyspark.SparkOfflineStore # MUST be this value
+    type: feast_pyspark.SparkOfflineStore
+    spark_conf:
+        spark.master: "local[*]"
+        spark.ui.enabled: "false"
+        spark.eventLog.enabled: "false"
+        spark.sql.catalogImplementation: "hive"
+        spark.sql.parser.quotedRegexColumnNames: "true"
+        spark.sql.session.timeZone: "UTC"
 ```
 
 ### Example
