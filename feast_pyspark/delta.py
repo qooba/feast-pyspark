@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from typing import Callable, Dict, List, Optional, Union
 
+from feast import type_map
 from feast.data_source import DataSource
 from feast.protos.feast.core.DataSource_pb2 import DataSource as DataSourceProto
 from feast.repo_config import RepoConfig

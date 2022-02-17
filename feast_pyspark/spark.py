@@ -25,6 +25,8 @@ from feast.saved_dataset import SavedDatasetStorage
 from feast.usage import log_exceptions_and_usage
 from pydantic.typing import Literal
 from pyspark.sql.functions import col, expr
+from pyspark.sql import SparkSession
+from pyspark import SparkConf
 
 
 def _run_spark_field_mapping(
@@ -44,6 +46,9 @@ class SparkOfflineStoreConfig(FeastConfigBaseModel):
 
     type: Literal["feast_pyspark.SparkOfflineStore"] = "feast_pyspark.SparkOfflineStore"
     """ Offline store type selector"""
+
+    spark_conf: Optional[Dict[str, str]] = None
+    """ Configuration overlay for the spark session """
 
 
 class SparkRetrievalJob(RetrievalJob):
@@ -104,8 +109,13 @@ class SparkOfflineStore(OfflineStore):
         project: str,
         full_feature_names: bool = False,
     ) -> RetrievalJob:
+
+        spark_session = _get_spark_session(
+            config.offline_store
+        )
+
         if not isinstance(entity_df, pd.DataFrame) and not isinstance(
-            entity_df, pd.DataFrame
+            entity_df, sd.DataFrame
         ):
             raise ValueError(
                 f"Please provide an entity_df of type {type(pd.DataFrame)} instead of type {type(entity_df)}"
@@ -136,9 +146,13 @@ class SparkOfflineStore(OfflineStore):
         # Create lazy function that is only called from the RetrievalJob object
         def evaluate_historical_retrieval():
 
-            SparkOfflineStore.spark.conf.set("spark.sql.session.timeZone", "UTC")
-            # Create a copy of entity_df to prevent modifying the original
-            entity_df_with_features = SparkOfflineStore.spark.createDataFrame(entity_df)
+            if isinstance(entity_df, pd.DataFrame):
+                # Create a copy of entity_df to prevent modifying the original
+                entity_df_with_features = spark_session.createDataFrame(
+                    entity_df
+                )
+            else:
+                entity_df_with_features = entity_df
 
             # Sort event timestamp values
             entity_df_with_features = entity_df_with_features.orderBy(
@@ -171,7 +185,7 @@ class SparkOfflineStore(OfflineStore):
 
                 # feature_view.batch_source.s3_endpoint_override
                 df_to_join = DeltaTable.forPath(
-                    SparkOfflineStore.spark, feature_view.batch_source.path
+                    spark_session, feature_view.batch_source.path
                 ).toDF()
 
                 # Build a list of all the features we should select from this source
@@ -201,19 +215,20 @@ class SparkOfflineStore(OfflineStore):
                 # Get only data with requested entities
                 ttl_seconds = feature_view.ttl.total_seconds()
 
-                df_to_join = entity_df_with_features.join(
-                    df_to_join, join_keys, "left"
-                ).filter(
-                    (
-                        col(event_timestamp_column)
-                        >= col(entity_df_event_timestamp_col)
-                        - expr(f"INTERVAL {ttl_seconds} seconds")
+                if ttl_seconds != 0:
+                    df_to_join = entity_df_with_features.join(
+                        df_to_join, join_keys, "left"
+                    ).filter(
+                        (
+                            col(event_timestamp_column)
+                            >= col(entity_df_event_timestamp_col)
+                            - expr(f"INTERVAL {ttl_seconds} seconds")
+                        )
+                        & (
+                            col(event_timestamp_column)
+                            <= col(entity_df_event_timestamp_col)
+                        )
                     )
-                    & (
-                        col(event_timestamp_column)
-                        <= col(entity_df_event_timestamp_col)
-                    )
-                )
 
                 if created_timestamp_column:
                     df_to_join = df_to_join.orderBy(
@@ -363,3 +378,21 @@ class SparkOfflineStore(OfflineStore):
         end_date: datetime,
     ) -> RetrievalJob:
         pass
+
+def _get_spark_session(
+    store_config: SparkOfflineStoreConfig,
+) -> SparkSession:
+    spark_session = SparkSession.getActiveSession()
+
+    if not spark_session:
+        spark_builder = SparkSession.builder
+        spark_conf = store_config.spark_conf
+
+        if spark_conf:
+            spark_builder = spark_builder.config(
+                conf=SparkConf().setAll(spark_conf.items())
+            )  # noqa
+
+        spark_session = spark_builder.getOrCreate()
+
+    return spark_session
