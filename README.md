@@ -40,5 +40,6 @@ TODO
 ## References
 
 [feast-spark-offline-store](https://github.com/Adyen/feast-spark-offline-store/) - spark configuration and session
+
 [feast-postgres](https://github.com/nossrannug/feast-postgres) - parts of Makefiles and github workflows
 
