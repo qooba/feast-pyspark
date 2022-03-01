@@ -212,13 +212,19 @@ class SparkOfflineStore(OfflineStore):
                     [col(c) for c in right_entity_key_columns + feature_names]
                 )
 
+                range_join = feature_view.batch_source.range_join
+                if range_join:
+                    df_to_join = df_to_join.hint("range_join", range_join)
+                
+                df_to_join = entity_df_with_features.join(
+                    df_to_join, join_keys, "left"
+                )
+                
                 # Get only data with requested entities
                 ttl_seconds = feature_view.ttl.total_seconds()
 
-                if ttl_seconds != 0:
-                    df_to_join = entity_df_with_features.join(
-                        df_to_join, join_keys, "left"
-                    ).filter(
+                if ttl_seconds != 0:    
+                    df_to_join= df_to_join.filter(
                         (
                             col(event_timestamp_column)
                             >= col(entity_df_event_timestamp_col)

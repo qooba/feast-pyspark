@@ -20,6 +20,7 @@ class DeltaDataSource(DataSource):
         field_mapping: Optional[Dict[str, str]] = None,
         created_timestamp_column: Optional[str] = "",
         date_partition_column: Optional[str] = "",
+        range_join: Optional[int] = None,
     ):
         super().__init__(
             event_timestamp_column=event_timestamp_column,
@@ -29,6 +30,7 @@ class DeltaDataSource(DataSource):
         )
         self._path = path
         self._s3_endpoint_override = s3_endpoint_override
+        self._range_join = range_join
 
     @property
     def path(self):
@@ -36,6 +38,13 @@ class DeltaDataSource(DataSource):
         Returns the file path of this feature data source.
         """
         return self._path
+    
+    @property
+    def range_join(self):
+        """
+        Returns the file path of this feature data source.
+        """
+        return self._range_join
 
     @property
     def s3_endpoint_override(self):
@@ -55,6 +64,7 @@ class DeltaDataSource(DataSource):
         )
         path = json.loads(custom_source_options)["path"]
         s3_endpoint_override = json.loads(custom_source_options)["s3_endpoint_override"]
+        range_join = json.loads(custom_source_options)["range_join"]
         return DeltaDataSource(
             field_mapping=dict(data_source.field_mapping),
             path=path,
@@ -62,6 +72,7 @@ class DeltaDataSource(DataSource):
             event_timestamp_column=data_source.event_timestamp_column,
             created_timestamp_column=data_source.created_timestamp_column,
             date_partition_column=data_source.date_partition_column,
+            range_join=range_join,
         )
 
     def to_proto(self) -> DataSourceProto:
@@ -70,7 +81,7 @@ class DeltaDataSource(DataSource):
         custom options into the custom_options field as a binary encoded json string.
         """
         config_json = json.dumps(
-            {"path": self.path, "s3_endpoint_override": self.s3_endpoint_override}
+            {"path": self.path, "s3_endpoint_override": self.s3_endpoint_override, "range_join": self.range_join}
         )
         data_source_proto = DataSourceProto(
             type=DataSourceProto.CUSTOM_SOURCE,
