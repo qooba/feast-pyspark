@@ -24,7 +24,7 @@ from feast.repo_config import FeastConfigBaseModel, RepoConfig
 from feast.saved_dataset import SavedDatasetStorage
 from feast.usage import log_exceptions_and_usage
 from pydantic.typing import Literal
-from pyspark.sql.functions import col, expr
+from pyspark.sql.functions import col, expr, lit
 from pyspark.sql import SparkSession
 from pyspark import SparkConf
 
@@ -215,15 +215,15 @@ class SparkOfflineStore(OfflineStore):
                 range_join = feature_view.batch_source.range_join
                 if range_join:
                     df_to_join = df_to_join.hint("range_join", range_join)
-                
+
                 df_to_join = entity_df_with_features.join(
                     df_to_join, join_keys, "left"
                 )
-                
+
                 # Get only data with requested entities
                 ttl_seconds = feature_view.ttl.total_seconds()
 
-                if ttl_seconds != 0:    
+                if ttl_seconds != 0:
                     df_to_join= df_to_join.filter(
                         (
                             col(event_timestamp_column)
@@ -284,52 +284,17 @@ class SparkOfflineStore(OfflineStore):
         start_date: datetime,
         end_date: datetime,
     ) -> RetrievalJob:
-        assert isinstance(data_source, FileSource)
+
+        spark_session = _get_spark_session(
+            config.offline_store
+        )
 
         # Create lazy function that is only called from the RetrievalJob object
         def evaluate_offline_job():
 
-            storage_options = (
-                {"client_kwargs": {"endpoint_url": data_source.s3_endpoint_override}}
-                if data_source.s3_endpoint_override
-                else None
-            )
-
-            source_df = dd.read_parquet(
-                data_source.path, storage_options=storage_options
-            )
-
-            source_df_types = source_df.dtypes
-            event_timestamp_column_type = source_df_types[event_timestamp_column]
-
-            if created_timestamp_column:
-                created_timestamp_column_type = source_df_types[
-                    created_timestamp_column
-                ]
-
-            if (
-                not hasattr(event_timestamp_column_type, "tz")
-                or event_timestamp_column_type.tz != pytz.UTC
-            ):
-                source_df[event_timestamp_column] = source_df[
-                    event_timestamp_column
-                ].apply(
-                    lambda x: x if x.tzinfo is not None else x.replace(tzinfo=pytz.utc),
-                    meta=(event_timestamp_column, "datetime64[ns, UTC]"),
-                )
-
-            if created_timestamp_column and (
-                not hasattr(created_timestamp_column_type, "tz")
-                or created_timestamp_column_type.tz != pytz.UTC
-            ):
-                source_df[created_timestamp_column] = source_df[
-                    created_timestamp_column
-                ].apply(
-                    lambda x: x if x.tzinfo is not None else x.replace(tzinfo=pytz.utc),
-                    meta=(event_timestamp_column, "datetime64[ns, UTC]"),
-                )
-
-            source_df = source_df.persist()
+            source_df = DeltaTable.forPath(
+                    spark_session, data_source.path
+                ).toDF()
 
             source_columns = set(source_df.columns)
             if not set(join_key_columns).issubset(source_columns):
@@ -337,35 +302,35 @@ class SparkOfflineStore(OfflineStore):
                     data_source.path, set(join_key_columns), source_columns
                 )
 
+            source_df= source_df.filter(
+                (col(event_timestamp_column) >= start_date)
+                & ( col(event_timestamp_column) <= end_date))
+
+            if created_timestamp_column:
+                source_df = source_df.orderBy(
+                    col(created_timestamp_column).desc(),
+                    col(event_timestamp_column).desc(),
+                )
+            else:
+                source_df = source_df.orderBy(col(event_timestamp_column).desc())
+
             ts_columns = (
                 [event_timestamp_column, created_timestamp_column]
                 if created_timestamp_column
                 else [event_timestamp_column]
             )
 
-            source_df = source_df.sort_values(by=event_timestamp_column)
-
-            source_df = source_df[
-                (source_df[event_timestamp_column] >= start_date)
-                & (source_df[event_timestamp_column] < end_date)
-            ]
-
-            source_df = source_df.persist()
-
             columns_to_extract = set(
                 join_key_columns + feature_name_columns + ts_columns
             )
+
             if join_key_columns:
-                source_df = source_df.drop_duplicates(
-                    join_key_columns, keep="last", ignore_index=True
-                )
+                source_df = source_df.dropDuplicates(join_key_columns)
             else:
-                source_df[DUMMY_ENTITY_ID] = DUMMY_ENTITY_VAL
+                source_df.withColumn(DUMMY_ENTITY_ID, lit(DUMMY_ENTITY_VAL))
                 columns_to_extract.add(DUMMY_ENTITY_ID)
 
-            source_df = source_df.persist()
-
-            return source_df[list(columns_to_extract)].persist()
+            return source_df.select([col(c) for c in list(columns_to_extract)])
 
         # When materializing a single feature view, we don't need full feature names. On demand transforms aren't materialized
         return SparkRetrievalJob(
